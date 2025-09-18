@@ -58,7 +58,7 @@ h1, h2, h3 {
 }
 
 h1 {
-    text-align: left;
+    text-align: center;
     font-size: 2.5rem;
     margin-bottom: 0;
     background: -webkit-linear-gradient(45deg, var(--gradient-start), var(--gradient-end));
@@ -89,11 +89,16 @@ h3 {
 
 .app-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
+    position: relative;
 }
 
 .theme-switcher {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
     background: transparent;
     border: 1px solid var(--border-color);
     color: var(--text-color);
