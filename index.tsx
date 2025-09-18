@@ -16,15 +16,16 @@ type Theme = {
 type Codebooks = { [name: string]: Theme[] };
 
 type CodingResult = {
-  originalResponse: string;
   themeName: string;
   sentiment: 'Positive' | 'Negative' | 'Neutral';
   confidenceScore: number;
   reasoning: string;
+  responseColumn: string;
   suggestedTheme?: {
     name: string;
     description: string;
   };
+  rawData: { [key: string]: string };
 };
 
 type Page = 'codebook' | 'analysis' | 'report';
@@ -204,7 +205,7 @@ function ThemeSuggestionModal({ isOpen, suggestions, onComplete, onClose }: Them
                         {processedSuggestions.map((s, index) => (
                             <div key={index} className={`suggestion-item ${!s.isApproved ? 'is-disabled' : ''}`}>
                                 <p>For the response:</p>
-                                <blockquote>{s.originalResponse}</blockquote>
+                                <blockquote>{s.rawData[s.responseColumn]}</blockquote>
                                 <div className="suggestion-controls">
                                     <div className="suggestion-approval">
                                         <input
@@ -283,6 +284,58 @@ function DeleteConfirmationModal({ isOpen, onClose, onConfirm, codebookName, has
                         <button onClick={onClose} className="button secondary-button">Cancel</button>
                         <button onClick={onConfirm} className="button danger-button">Delete</button>
                     </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// =================================================================
+// Prompt Suggestion Modal Component
+// =================================================================
+type PromptSuggestionModalProps = {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (prompt: string) => void;
+    initialPrompt: string;
+};
+
+function PromptSuggestionModal({ isOpen, onClose, onSave, initialPrompt }: PromptSuggestionModalProps) {
+    const [editedPrompt, setEditedPrompt] = useState('');
+
+    useEffect(() => {
+        if (isOpen) {
+            setEditedPrompt(initialPrompt);
+        }
+    }, [isOpen, initialPrompt]);
+
+    const handleSaveClick = () => {
+        onSave(editedPrompt);
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content prompt-suggestion-modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                    <h2>AI Prompt Suggestion</h2>
+                    <button onClick={onClose} className="modal-close-button" aria-label="Close dialog">&times;</button>
+                </div>
+                <div className="modal-body">
+                    <p>The AI has generated a prompt based on your data's metadata. You can edit it below before using it.</p>
+                    <div className="form-group">
+                        <label htmlFor="suggested-prompt-textarea">Suggested Prompt</label>
+                        <textarea
+                            id="suggested-prompt-textarea"
+                            value={editedPrompt}
+                            onChange={(e) => setEditedPrompt(e.target.value)}
+                        />
+                    </div>
+                </div>
+                <div className="modal-actions">
+                    <button onClick={onClose} className="button secondary-button">Cancel</button>
+                    <button onClick={handleSaveClick} className="button">Save Prompt</button>
                 </div>
             </div>
         </div>
@@ -604,10 +657,17 @@ type AnalysisPageProps = {
 }
 
 function AnalysisPage({ themes, results, setResults, ai, addNewThemes }: AnalysisPageProps) {
-  const [responses, setResponses] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Data state
+  const [uploadedData, setUploadedData] = useState<{[key: string]: string}[]>([]);
+  const [dataHeaders, setDataHeaders] = useState<string[]>([]);
+  const [responseColumn, setResponseColumn] = useState<string>('');
+
+  // UI State
   const [showLowConfidenceOnly, setShowLowConfidenceOnly] = useState(false);
+  const [showMetadata, setShowMetadata] = useState(false);
   
   // Modals state
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -620,6 +680,18 @@ function AnalysisPage({ themes, results, setResults, ai, addNewThemes }: Analysi
 
 
   const LOW_CONFIDENCE_THRESHOLD = 0.7;
+
+  const responseColumnHeader = useMemo(() => {
+    if (results.length === 0) return null;
+    const firstResult = results[0];
+    
+    // Fallback for older data structures or if responseColumn is not set
+    if (!('responseColumn' in firstResult) || !firstResult.responseColumn) return 'Response';
+
+    const firstColumn = firstResult.responseColumn;
+    const allSame = results.every(r => r.responseColumn === firstColumn);
+    return allSame ? firstColumn : 'Response';
+  }, [results]);
 
   const filteredResults = useMemo(() => {
       if (!showLowConfidenceOnly) {
@@ -635,20 +707,64 @@ function AnalysisPage({ themes, results, setResults, ai, addNewThemes }: Analysi
     const reader = new FileReader();
     reader.onload = (e) => {
         const text = e.target?.result as string;
-        setResponses(prev => `${prev}\n${text}`.trim());
+        try {
+            const lines = text.trim().split('\n');
+            if (lines.length < 2) {
+                throw new Error("CSV must have a header row and at least one data row.");
+            }
+            // A simple parser assuming values don't contain commas.
+            const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+            const data = lines.slice(1).map(line => {
+                const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+                const row: {[key: string]: string} = {};
+                headers.forEach((header, index) => {
+                    row[header] = values[index] || '';
+                });
+                return row;
+            });
+            
+            setDataHeaders(headers);
+            setUploadedData(data);
+            
+            // Auto-detect response column
+            const keywords = ['response', 'comment', 'feedback', 'suggestion', 'text'];
+            let detectedColumn = '';
+            for (const header of headers) {
+                const lowerHeader = header.toLowerCase();
+                if (keywords.some(keyword => lowerHeader.includes(keyword))) {
+                    detectedColumn = header;
+                    break;
+                }
+            }
+            setResponseColumn(detectedColumn);
+            
+            setError(null);
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            setError(`Error parsing CSV file. ${errorMessage}`);
+            setDataHeaders([]);
+            setUploadedData([]);
+            setResponseColumn('');
+        }
     };
     reader.readAsText(file);
     event.target.value = '';
   };
   
   const handleUpdateResult = (indexToUpdate: number, field: 'themeName' | 'sentiment', value: string) => {
-      const originalIndex = results.findIndex(res => res.originalResponse === filteredResults[indexToUpdate].originalResponse);
-      const updatedResults = [...results];
-      updatedResults[originalIndex] = { ...updatedResults[originalIndex], [field]: value };
-      setResults(updatedResults);
+      const originalIndex = results.findIndex(res => res === filteredResults[indexToUpdate]);
+      if (originalIndex !== -1) {
+          const updatedResults = [...results];
+          updatedResults[originalIndex] = { ...updatedResults[originalIndex], [field]: value };
+          setResults(updatedResults);
+      }
   };
 
   const runAnalysis = async (mode: 'replace' | 'append') => {
+    if (!responseColumn) {
+        setError('Please select the column containing the response text.');
+        return;
+    }
     setIsLoading(true);
     setError(null);
     setAnalysisMode(mode);
@@ -664,7 +780,7 @@ function AnalysisPage({ themes, results, setResults, ai, addNewThemes }: Analysi
 - Do not suggest a new theme if the response can reasonably fit into an existing one. Only use the themes provided.`;
 
     const themeDefinitions = themes.map(t => `- ${t.name}: ${t.description}`).join('\n');
-    const responseList = responses.trim().split('\n');
+    const responseList = uploadedData.map(row => row[responseColumn]);
 
     const prompt = `Here is the codebook (themes):\n${themeDefinitions}\n\nPlease code the following responses:\n${responseList.map(r => `- "${r}"`).join('\n')}`;
 
@@ -707,7 +823,21 @@ function AnalysisPage({ themes, results, setResults, ai, addNewThemes }: Analysi
       });
 
       const parsedResponse = JSON.parse(response.text);
-      const newResults: CodingResult[] = parsedResponse.results;
+      
+      const newResults: CodingResult[] = parsedResponse.results.map((analysisResult: any, index: number) => {
+        // Find the original data row by matching the response text. Fallback to index if duplicates exist.
+        const originalDataRow = uploadedData.find(d => d[responseColumn] === analysisResult.originalResponse) || uploadedData[index];
+        return {
+            themeName: analysisResult.themeName,
+            sentiment: analysisResult.sentiment,
+            confidenceScore: analysisResult.confidenceScore,
+            reasoning: analysisResult.reasoning,
+            suggestedTheme: analysisResult.suggestedTheme,
+            rawData: originalDataRow,
+            responseColumn: responseColumn,
+        };
+      });
+
       const suggestions = newResults.filter(r => r.suggestedTheme && r.suggestedTheme.name && r.suggestedTheme.description);
       const regularResults = newResults.filter(r => !r.suggestedTheme || !r.suggestedTheme.name);
 
@@ -725,7 +855,9 @@ function AnalysisPage({ themes, results, setResults, ai, addNewThemes }: Analysi
         }
         setPendingResults([]);
       }
-      setResponses(''); // Clear input after successful analysis
+      setUploadedData([]); // Clear uploaded data after successful analysis
+      setDataHeaders([]);
+      setResponseColumn('');
     } catch (e) {
       console.error(e);
       const errorMessage = e instanceof Error ? e.message : String(e);
@@ -740,8 +872,8 @@ function AnalysisPage({ themes, results, setResults, ai, addNewThemes }: Analysi
         setError('Please set your Gemini API key to run the analysis.');
         return;
     }
-    if (themes.length === 0 || !responses.trim()) {
-      setError('Please define a codebook and provide some responses to code.');
+    if (themes.length === 0 || uploadedData.length === 0 || !responseColumn) {
+      setError('Please define a codebook, upload a dataset, and select the response column.');
       return;
     }
 
@@ -787,8 +919,10 @@ function AnalysisPage({ themes, results, setResults, ai, addNewThemes }: Analysi
 
   const handleDownloadCSV = () => {
     if (results.length === 0) return;
-
-    const headers = ["Response", "Assigned Theme", "Sentiment", "Confidence Score", "Reasoning"];
+    
+    const resultHeaders = Object.keys(results[0].rawData);
+    const analysisHeaders = ["Assigned Theme", "Sentiment", "Confidence Score", "Reasoning"];
+    const headers = [...resultHeaders, ...analysisHeaders];
     
     const escapeCsvField = (field: string | number): string => {
         const stringField = String(field);
@@ -801,7 +935,7 @@ function AnalysisPage({ themes, results, setResults, ai, addNewThemes }: Analysi
     const csvContent = [
         headers.join(','),
         ...results.map(row => [
-            escapeCsvField(row.originalResponse),
+            ...resultHeaders.map(h => escapeCsvField(row.rawData[h])),
             escapeCsvField(row.themeName),
             escapeCsvField(row.sentiment),
             escapeCsvField(row.confidenceScore),
@@ -813,7 +947,7 @@ function AnalysisPage({ themes, results, setResults, ai, addNewThemes }: Analysi
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", "coded_responses.csv");
+    link.setAttribute("download", "coded_responses_with_metadata.csv");
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -824,38 +958,40 @@ function AnalysisPage({ themes, results, setResults, ai, addNewThemes }: Analysi
   const handleClearResults = () => {
     setResults([]);
   };
+  
+  const resultTableHeaders = useMemo(() => {
+    if (results.length === 0) return [];
+    return Object.keys(results[0].rawData);
+  }, [results]);
 
   return (
     <>
         <div className="page-content-vertical">
             <div className="panel" role="form" aria-labelledby="responses-heading">
-                <h2 id="responses-heading">Add Responses for Analysis</h2>
+                <h2 id="responses-heading">Upload Dataset for Analysis</h2>
                 {!ai && (
                     <div className="error" style={{marginBottom: '1rem'}}>
                         Please set your Gemini API key in the settings (⚙️ icon) to enable AI-powered analysis.
                     </div>
                 )}
-                <div className="analysis-input-layout">
-                    <div className="form-group">
-                        <label htmlFor="responses-textarea">Paste your responses here, one per line.</label>
-                        <textarea
-                            id="responses-textarea"
-                            value={responses}
-                            onChange={(e) => setResponses(e.target.value)}
-                            placeholder="The support team was very helpful.&#10;The app is too slow.&#10;I wish there was a dark mode feature."
-                            style={{minHeight: '200px'}}
-                        />
-                    </div>
-                    <div className="bulk-upload-section analysis-upload">
-                        <h3>Or Upload Data</h3>
-                        <p>Upload a single-column CSV file with responses (no header row).</p>
-                        <label htmlFor="csv-response-upload" className="button">Upload CSV</label>
-                        <input id="csv-response-upload" type="file" accept=".csv" onChange={handleResponseFileUpload} />
-                    </div>
+                <p>Upload a CSV file with responses and any relevant metadata. The first row must contain headers.</p>
+                <div className="analysis-actions">
+                    <label htmlFor="csv-response-upload" className="button">Upload CSV</label>
+                    <input id="csv-response-upload" type="file" accept=".csv" onChange={handleResponseFileUpload} />
+                    <button onClick={handleCodeResponses} disabled={isLoading || themes.length === 0 || uploadedData.length === 0 || !responseColumn || !ai} className="button">
+                        {isLoading ? 'Coding...' : 'Code Responses'}
+                    </button>
                 </div>
-                <button onClick={handleCodeResponses} disabled={isLoading || themes.length === 0 || !responses.trim() || !ai} className="button">
-                    {isLoading ? 'Coding...' : 'Code Responses'}
-                </button>
+                {uploadedData.length > 0 && (
+                    <div className="form-group" style={{marginTop: '1.5rem'}}>
+                        <label htmlFor="response-column-select">Which column contains the survey response text?</label>
+                        <select id="response-column-select" value={responseColumn} onChange={e => setResponseColumn(e.target.value)}>
+                            <option value="" disabled>-- Select a column --</option>
+                            {dataHeaders.map(header => <option key={header} value={header}>{header}</option>)}
+                        </select>
+                        <p className="form-helper-text">{uploadedData.length} rows detected.</p>
+                    </div>
+                )}
             </div>
             <div className="panel" role="region" aria-live="polite">
                 <div className="results-header">
@@ -867,6 +1003,9 @@ function AnalysisPage({ themes, results, setResults, ai, addNewThemes }: Analysi
                                 Show low confidence only (&lt;{LOW_CONFIDENCE_THRESHOLD * 100}%)
                             </label>
                         </div>
+                        <button onClick={() => setShowMetadata(prev => !prev)} disabled={results.length === 0} className="button small-button secondary-button">
+                            {showMetadata ? 'Hide Metadata' : 'Show Metadata'}
+                        </button>
                         <button onClick={handleClearResults} disabled={results.length === 0} className="button small-button tertiary-button">
                             Clear Results
                         </button>
@@ -893,7 +1032,9 @@ function AnalysisPage({ themes, results, setResults, ai, addNewThemes }: Analysi
                         <table className="results-table">
                             <thead>
                                 <tr>
-                                    <th>Response</th>
+                                    {showMetadata && resultTableHeaders.map(h => <th key={h}>{h}</th>)}
+                                    {!showMetadata && responseColumnHeader && <th>{responseColumnHeader}</th>}
+                                    {!showMetadata && resultTableHeaders.includes('rating') && <th>rating</th>}
                                     <th>Assigned Theme</th>
                                     <th>Sentiment</th>
                                     <th>Confidence</th>
@@ -903,7 +1044,14 @@ function AnalysisPage({ themes, results, setResults, ai, addNewThemes }: Analysi
                             <tbody>
                                 {filteredResults.map((result, index) => (
                                     <tr key={index}>
-                                        <td>{result.originalResponse}</td>
+                                        {showMetadata && resultTableHeaders.map(h => <td key={h}>{result.rawData[h]}</td>)}
+                                        {!showMetadata && responseColumnHeader && (
+                                            <td>
+                                                {/* Access the response text using the column name stored in the result itself */}
+                                                {result.rawData[result.responseColumn]}
+                                            </td>
+                                        )}
+                                        {!showMetadata && resultTableHeaders.includes('rating') && <td>{result.rawData['rating']}</td>}
                                         <EditableCell
                                             value={result.themeName}
                                             options={themes.map(t => t.name).concat(['Uncategorized'])}
@@ -1039,6 +1187,9 @@ function ReportPage({ results, ai, reportContent, setReportContent, chatHistory,
     );
     const [isReportLoading, setIsReportLoading] = useState(false);
     const [reportError, setReportError] = useState<string | null>(null);
+    const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
+    const [suggestedPrompt, setSuggestedPrompt] = useState('');
+    const [isSuggestionLoading, setIsSuggestionLoading] = useState(false);
 
     const [chatInput, setChatInput] = useState('');
     const [isChatLoading, setIsChatLoading] = useState(false);
@@ -1155,6 +1306,45 @@ function ReportPage({ results, ai, reportContent, setReportContent, chatHistory,
     const handleAddToReport = (text: string) => {
         setReportContent(prev => `${prev}\n\n---\n\n${text}`);
     }
+
+    const handleSuggestPrompt = async () => {
+        if (!ai || results.length === 0) return;
+
+        setIsSuggestionLoading(true);
+        setReportError(null);
+
+        const dataSample = results.slice(0, 30).map(r => r.rawData);
+        
+        const systemInstruction = `You are an expert data analyst. Your task is to generate a sophisticated report prompt for another AI.
+First, analyze the provided sample data (JSON format) to understand its structure and content. Infer the type of survey this data represents (e.g., NPS, satisfaction survey, user feedback). Identify key metadata columns suitable for subgroup analysis (e.g., user roles, states, product types, rating scores).
+
+Then, create a comprehensive, multi-part report prompt with the following four sections, incorporating the inferred survey type and metadata:
+
+1.  **Executive Summary:** A section asking for a high-level overview of key findings.
+2.  **Overall Thematic Analysis:** A section asking for a detailed breakdown of themes, frequency, and illustrative quotes for the entire dataset.
+3.  **Subgroup Deep Dive:** A section asking for a comparative analysis of themes and sentiments across the most relevant subgroups you identify in the metadata. This should highlight key differences and similarities.
+4.  **Actionable Insights & Next Steps:** A section asking for concrete recommendations and suggestions for future actions based on the analysis.
+
+The final output must be ONLY the text for the new prompt, formatted clearly with Markdown headings for each section. Do not include any other explanation or preamble.`;
+
+        const prompt = `Here is a sample of the data to analyze:\n\n${JSON.stringify(dataSample, null, 2)}\n\nBased on this data, generate a detailed report prompt.`;
+
+        try {
+            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { systemInstruction } });
+            setSuggestedPrompt(response.text);
+            setIsSuggestionModalOpen(true);
+        } catch (e) {
+            const errorMessage = e instanceof Error ? e.message : String(e);
+            setReportError(`An error occurred while suggesting a prompt. Details: ${errorMessage}`);
+        } finally {
+            setIsSuggestionLoading(false);
+        }
+    };
+
+    const handleSaveSuggestion = (newPrompt: string) => {
+        setReportPrompt(newPrompt);
+        setIsSuggestionModalOpen(false);
+    };
     
     return (
         <div className="page-content-vertical">
@@ -1212,7 +1402,16 @@ function ReportPage({ results, ai, reportContent, setReportContent, chatHistory,
                 <div className="panel report-panel">
                     <h2>Report Editor</h2>
                     <div className="form-group">
-                        <label htmlFor="report-prompt">Report Generation Prompt</label>
+                        <div className="label-with-action">
+                           <label htmlFor="report-prompt">Report Generation Prompt</label>
+                           <button 
+                                onClick={handleSuggestPrompt} 
+                                disabled={isSuggestionLoading || results.length === 0 || !ai} 
+                                className="button small-button secondary-button"
+                            >
+                                {isSuggestionLoading ? 'Analyzing...' : 'Suggest Prompt'}
+                            </button>
+                        </div>
                         <textarea
                             id="report-prompt"
                             value={reportPrompt}
@@ -1251,6 +1450,12 @@ function ReportPage({ results, ai, reportContent, setReportContent, chatHistory,
                     </div>
                 </div>
             </div>
+             <PromptSuggestionModal
+                isOpen={isSuggestionModalOpen}
+                onClose={() => setIsSuggestionModalOpen(false)}
+                onSave={handleSaveSuggestion}
+                initialPrompt={suggestedPrompt}
+            />
         </div>
     );
 }
