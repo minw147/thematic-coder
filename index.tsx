@@ -708,20 +708,60 @@ function AnalysisPage({ themes, results, setResults, ai, addNewThemes }: Analysi
     reader.onload = (e) => {
         const text = e.target?.result as string;
         try {
-            const lines = text.trim().split('\n');
-            if (lines.length < 2) {
-                throw new Error("CSV must have a header row and at least one data row.");
-            }
-            // A simple parser assuming values don't contain commas.
-            const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-            const data = lines.slice(1).map(line => {
-                const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
-                const row: {[key: string]: string} = {};
-                headers.forEach((header, index) => {
-                    row[header] = values[index] || '';
-                });
-                return row;
-            });
+            // A robust CSV parser that handles quoted fields containing commas.
+            const parseCsv = (csvText: string): { headers: string[]; data: { [key: string]: string }[] } => {
+                const lines = csvText.trim().split(/\r\n?|\n/);
+                if (lines.length < 2) {
+                    throw new Error("CSV must have a header row and at least one data row.");
+                }
+
+                const parseLine = (line: string): string[] => {
+                    const result: string[] = [];
+                    let field = '';
+                    let inQuotes = false;
+                    for (let i = 0; i < line.length; i++) {
+                        const char = line[i];
+                        if (inQuotes) {
+                            if (char === '"') {
+                                if (i + 1 < line.length && line[i + 1] === '"') {
+                                    field += '"';
+                                    i++; // Skip the next quote
+                                } else {
+                                    inQuotes = false;
+                                }
+                            } else {
+                                field += char;
+                            }
+                        } else {
+                            if (char === ',') {
+                                result.push(field);
+                                field = '';
+                            } else if (char === '"') {
+                                inQuotes = true;
+                            } else {
+                                field += char;
+                            }
+                        }
+                    }
+                    result.push(field);
+                    return result;
+                };
+
+                const headers = parseLine(lines[0]);
+                const data = lines.slice(1).map(line => {
+                    if (!line.trim()) return null; // Skip empty lines
+                    const values = parseLine(line);
+                    const row: { [key: string]: string } = {};
+                    headers.forEach((header, index) => {
+                        row[header] = values[index] || '';
+                    });
+                    return row;
+                }).filter(row => row !== null) as { [key: string]: string }[];
+
+                return { headers, data };
+            };
+
+            const { headers, data } = parseCsv(text);
             
             setDataHeaders(headers);
             setUploadedData(data);
@@ -1037,7 +1077,7 @@ function AnalysisPage({ themes, results, setResults, ai, addNewThemes }: Analysi
                                     {!showMetadata && resultTableHeaders.includes('rating') && <th>rating</th>}
                                     <th>Assigned Theme</th>
                                     <th>Sentiment</th>
-                                    <th>Confidence</th>
+                                    <th className="confidence-cell">Confidence</th>
                                     <th>Reasoning</th>
                                 </tr>
                             </thead>

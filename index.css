@@ -595,6 +595,7 @@ input[type="file"] {
 
 .confidence-cell {
     font-weight: bold;
+    text-align: center;
 }
 .editable-cell {
     cursor: pointer;
