@@ -303,6 +303,23 @@ textarea {
     color: var(--text-muted-color);
 }
 
+.button.danger-button {
+    background-color: transparent;
+    border: 1px solid var(--error-color);
+    color: var(--error-color);
+}
+
+.button.danger-button:hover:not(:disabled) {
+    background-color: var(--error-color);
+    color: var(--surface-color);
+}
+
+.button.danger-button:disabled {
+    border-color: var(--text-muted-color);
+    background-color: transparent;
+    color: var(--text-muted-color);
+}
+
 
 input[type="file"] {
     display: none;
@@ -489,6 +506,18 @@ input[type="file"] {
     margin-bottom: 0;
 }
 
+.warning-text {
+    padding: 1rem;
+    margin: 1rem 0;
+    border-radius: var(--border-radius);
+    background-color: rgba(255, 85, 85, 0.05);
+    border-left: 5px solid var(--error-color);
+    color: var(--text-color);
+}
+.warning-text strong {
+    color: var(--error-color);
+}
+
 
 /* --- Codebook Page Specific Styles --- */
 .codebook-management-controls {
@@ -500,7 +529,7 @@ input[type="file"] {
     display: flex;
     gap: 0.5rem;
 }
-.input-group input {
+.input-group input, .input-group select {
     flex-grow: 1;
 }
 .input-group button {

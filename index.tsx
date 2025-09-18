@@ -251,6 +251,45 @@ function ThemeSuggestionModal({ isOpen, suggestions, onComplete, onClose }: Them
 }
 
 // =================================================================
+// Delete Confirmation Modal Component
+// =================================================================
+type DeleteConfirmationModalProps = {
+    isOpen: boolean;
+    onClose: () => void;
+    onConfirm: () => void;
+    codebookName: string;
+    hasAnalysisResults: boolean;
+};
+
+function DeleteConfirmationModal({ isOpen, onClose, onConfirm, codebookName, hasAnalysisResults }: DeleteConfirmationModalProps) {
+    if (!isOpen) return null;
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                    <h2>Confirm Deletion</h2>
+                    <button onClick={onClose} className="modal-close-button" aria-label="Close dialog">&times;</button>
+                </div>
+                <div className="modal-body">
+                    <p>Are you sure you want to permanently delete the "<strong>{codebookName}</strong>" codebook?</p>
+                    <p>This action cannot be undone.</p>
+                    {hasAnalysisResults && (
+                        <p className="warning-text">
+                            <strong>Warning:</strong> Deleting this codebook will also clear all of your current analysis results.
+                        </p>
+                    )}
+                    <div className="modal-actions">
+                        <button onClick={onClose} className="button secondary-button">Cancel</button>
+                        <button onClick={onConfirm} className="button danger-button">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// =================================================================
 // Reusable Editable Cell Component for the results table
 // =================================================================
 type EditableCellProps = {
@@ -358,13 +397,16 @@ type CodebookPageProps = {
   setCodebooks: React.Dispatch<React.SetStateAction<Codebooks>>;
   activeCodebook: string;
   setActiveCodebook: React.Dispatch<React.SetStateAction<string>>;
+  deleteCodebook: (name: string) => void;
+  results: CodingResult[];
 }
 
-function CodebookPage({ themes, setThemes, codebooks, setCodebooks, activeCodebook, setActiveCodebook }: CodebookPageProps) {
+function CodebookPage({ themes, setThemes, codebooks, setCodebooks, activeCodebook, setActiveCodebook, deleteCodebook, results }: CodebookPageProps) {
   const [newThemeName, setNewThemeName] = useState('');
   const [newThemeDescription, setNewThemeDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [newCodebookName, setNewCodebookName] = useState('');
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   const handleCreateCodebook = () => {
     const trimmedName = newCodebookName.trim();
@@ -373,6 +415,19 @@ function CodebookPage({ themes, setThemes, codebooks, setCodebooks, activeCodebo
         setActiveCodebook(trimmedName);
         setNewCodebookName('');
     }
+  };
+
+  const handleDeleteSelectedCodebook = () => {
+    if (activeCodebook) {
+        setIsDeleteModalOpen(true);
+    }
+  };
+
+  const handleConfirmDelete = () => {
+      if (activeCodebook) {
+          deleteCodebook(activeCodebook);
+      }
+      setIsDeleteModalOpen(false);
   };
 
   const handleAddTheme = () => {
@@ -429,91 +484,110 @@ function CodebookPage({ themes, setThemes, codebooks, setCodebooks, activeCodebo
 
 
   return (
-    <div className="page-content">
-       <div className="left-panel">
-         <div className="panel" role="form" aria-labelledby="codebook-management-heading">
-            <h2 id="codebook-management-heading">Manage Codebooks</h2>
-             <div className="codebook-management-controls">
-                <div className="form-group">
-                    <label htmlFor="codebook-select">Select Codebook</label>
-                    <select id="codebook-select" value={activeCodebook} onChange={(e) => setActiveCodebook(e.target.value)}>
-                        <option value="" disabled>-- Select a codebook --</option>
-                        {Object.keys(codebooks).sort().map(name => (
-                            <option key={name} value={name}>{name}</option>
-                        ))}
-                    </select>
-                </div>
-                <div className="form-group">
-                    <label htmlFor="new-codebook-name">Or Create New Codebook</label>
-                    <div className="input-group">
-                        <input 
-                            id="new-codebook-name" 
-                            type="text" 
-                            value={newCodebookName} 
-                            onChange={(e) => setNewCodebookName(e.target.value)}
-                            placeholder="New Codebook Name"
-                        />
-                        <button className="button" onClick={handleCreateCodebook} disabled={!newCodebookName.trim() || !!codebooks[newCodebookName.trim()]}>Create</button>
+    <>
+        <div className="page-content">
+           <div className="left-panel">
+             <div className="panel" role="form" aria-labelledby="codebook-management-heading">
+                <h2 id="codebook-management-heading">Manage Codebooks</h2>
+                 <div className="codebook-management-controls">
+                    <div className="form-group">
+                        <label htmlFor="codebook-select">Select Codebook</label>
+                        <div className="input-group">
+                            <select id="codebook-select" value={activeCodebook} onChange={(e) => setActiveCodebook(e.target.value)}>
+                                <option value="" disabled>-- Select a codebook --</option>
+                                {Object.keys(codebooks).sort().map(name => (
+                                    <option key={name} value={name}>{name}</option>
+                                ))}
+                            </select>
+                            <button 
+                                className="button danger-button" 
+                                onClick={handleDeleteSelectedCodebook} 
+                                disabled={!activeCodebook}
+                                title={activeCodebook ? `Delete '${activeCodebook}' codebook` : 'No codebook selected'}
+                            >
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                    <div className="form-group">
+                        <label htmlFor="new-codebook-name">Or Create New Codebook</label>
+                        <div className="input-group">
+                            <input 
+                                id="new-codebook-name" 
+                                type="text" 
+                                value={newCodebookName} 
+                                onChange={(e) => setNewCodebookName(e.target.value)}
+                                placeholder="New Codebook Name"
+                            />
+                            <button className="button" onClick={handleCreateCodebook} disabled={!newCodebookName.trim() || !!codebooks[newCodebookName.trim()]}>Create</button>
+                        </div>
                     </div>
                 </div>
-            </div>
-         </div>
+             </div>
 
-         {activeCodebook && (
-         <div className="panel" role="form" aria-labelledby="codebook-heading">
-            <h2 id="codebook-heading">Edit "{activeCodebook}"</h2>
-            <div className="form-group">
-                <label htmlFor="theme-name">Theme Name</label>
-                <input
-                    id="theme-name"
-                    type="text"
-                    value={newThemeName}
-                    onChange={(e) => setNewThemeName(e.target.value)}
-                    placeholder="e.g., Customer Support"
-                />
-            </div>
-             <div className="form-group">
-                <label htmlFor="theme-description">Theme Description</label>
-                <textarea
-                    id="theme-description"
-                    value={newThemeDescription}
-                    onChange={(e) => setNewThemeDescription(e.target.value)}
-                    placeholder="e.g., Mentions of interacting with the support team."
-                />
-            </div>
-            <button onClick={handleAddTheme} className="button">Add Theme</button>
-            {error && <div className="error" style={{marginTop: '1rem'}}>{error}</div>}
+             {activeCodebook && (
+             <div className="panel" role="form" aria-labelledby="codebook-heading">
+                <h2 id="codebook-heading">Edit "{activeCodebook}"</h2>
+                <div className="form-group">
+                    <label htmlFor="theme-name">Theme Name</label>
+                    <input
+                        id="theme-name"
+                        type="text"
+                        value={newThemeName}
+                        onChange={(e) => setNewThemeName(e.target.value)}
+                        placeholder="e.g., Customer Support"
+                    />
+                </div>
+                 <div className="form-group">
+                    <label htmlFor="theme-description">Theme Description</label>
+                    <textarea
+                        id="theme-description"
+                        value={newThemeDescription}
+                        onChange={(e) => setNewThemeDescription(e.target.value)}
+                        placeholder="e.g., Mentions of interacting with the support team."
+                    />
+                </div>
+                <button onClick={handleAddTheme} className="button">Add Theme</button>
+                {error && <div className="error" style={{marginTop: '1rem'}}>{error}</div>}
 
-            <div className="bulk-upload-section">
-                <h3>Bulk Upload</h3>
-                <p>Upload a CSV file with two columns: theme name, theme description (no header row).</p>
-                <label htmlFor="csv-upload" className="button">Upload CSV</label>
-                <input id="csv-upload" type="file" accept=".csv" onChange={handleFileUpload} />
-            </div>
-          </div>
-         )}
-       </div>
-       <div className="right-panel panel">
-          <h2>Current Codebook: {activeCodebook || "None selected"}</h2>
-          {activeCodebook && themes.length > 0 ? (
-                <ul className="theme-list" aria-live="polite">
-                    {themes.map((theme, index) => (
-                        <li key={index} className="theme-item">
-                           <div className="theme-item-content">
-                             <strong>{theme.name}</strong>
-                             <p>{theme.description}</p>
-                           </div>
-                           <button onClick={() => handleRemoveTheme(index)} className="remove-button" aria-label={`Remove ${theme.name} theme`}>&times;</button>
-                        </li>
-                    ))}
-                </ul>
-            ) : (
-              <div className="results-placeholder">
-                <p>{activeCodebook ? "Add themes manually or upload a CSV to build this codebook." : "Select a codebook to view its themes, or create a new one."}</p>
+                <div className="bulk-upload-section">
+                    <h3>Bulk Upload</h3>
+                    <p>Upload a CSV file with two columns: theme name, theme description (no header row).</p>
+                    <label htmlFor="csv-upload" className="button">Upload CSV</label>
+                    <input id="csv-upload" type="file" accept=".csv" onChange={handleFileUpload} />
+                </div>
               </div>
-            )}
-       </div>
-    </div>
+             )}
+           </div>
+           <div className="right-panel panel">
+              <h2>Current Codebook: {activeCodebook || "None selected"}</h2>
+              {activeCodebook && themes.length > 0 ? (
+                    <ul className="theme-list" aria-live="polite">
+                        {themes.map((theme, index) => (
+                            <li key={index} className="theme-item">
+                               <div className="theme-item-content">
+                                 <strong>{theme.name}</strong>
+                                 <p>{theme.description}</p>
+                               </div>
+                               <button onClick={() => handleRemoveTheme(index)} className="remove-button" aria-label={`Remove ${theme.name} theme`}>&times;</button>
+                            </li>
+                        ))}
+                    </ul>
+                ) : (
+                  <div className="results-placeholder">
+                    <p>{activeCodebook ? "Add themes manually or upload a CSV to build this codebook." : "Select a codebook to view its themes, or create a new one."}</p>
+                  </div>
+                )}
+           </div>
+        </div>
+        <DeleteConfirmationModal
+            isOpen={isDeleteModalOpen}
+            onClose={() => setIsDeleteModalOpen(false)}
+            onConfirm={handleConfirmDelete}
+            codebookName={activeCodebook}
+            hasAnalysisResults={results.length > 0}
+        />
+    </>
   );
 }
 
@@ -1268,6 +1342,22 @@ function App() {
     });
   };
 
+  const handleDeleteCodebook = (codebookNameToDelete: string) => {
+    const { [codebookNameToDelete]: deleted, ...newCodebooks } = codebooks;
+    
+    setCodebooks(newCodebooks);
+    
+    setResults([]);
+    setReportContent('');
+    setChatHistory([]);
+
+    if (activeCodebook === codebookNameToDelete) {
+        const remainingCodebookNames = Object.keys(newCodebooks).sort();
+        const newActiveCodebook = remainingCodebookNames.length > 0 ? remainingCodebookNames[0] : '';
+        setActiveCodebook(newActiveCodebook);
+    }
+  };
+
   const handleAddNewThemes = (newThemes: Theme[]) => {
     if (!activeCodebook) return;
     // Filter out duplicates
@@ -1289,6 +1379,8 @@ function App() {
                   setActiveCodebook={setActiveCodebook}
                   themes={activeThemes}
                   setThemes={handleSetThemes}
+                  deleteCodebook={handleDeleteCodebook}
+                  results={results}
                />;
       case 'analysis':
         return <AnalysisPage themes={activeThemes} results={results} setResults={setResults} ai={ai} addNewThemes={handleAddNewThemes} />;
@@ -1309,6 +1401,8 @@ function App() {
                   setActiveCodebook={setActiveCodebook}
                   themes={activeThemes}
                   setThemes={handleSetThemes}
+                  deleteCodebook={handleDeleteCodebook}
+                  results={results}
                />;
     }
   };
