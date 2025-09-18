@@ -729,7 +729,7 @@ input[type="file"] {
 }
 .bar {
     width: 100%;
-    background-color: var(--primary-color);
+    /* background-color is now set via inline style */
     border-radius: 4px 4px 0 0;
     transition: height 0.3s ease-in-out;
 }

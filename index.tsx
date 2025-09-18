@@ -874,8 +874,9 @@ function AnalysisPage({ themes, results, setResults, ai, addNewThemes }: Analysi
 type BarChartProps = {
     title: string;
     data: Map<string, number>;
+    color: string;
 }
-function BarChartComponent({ title, data }: BarChartProps) {
+function BarChartComponent({ title, data, color }: BarChartProps) {
     const maxCount = useMemo(() => Math.max(1, ...Array.from(data.values())), [data]);
     return (
         <div className="chart-container">
@@ -885,7 +886,7 @@ function BarChartComponent({ title, data }: BarChartProps) {
                     {Array.from(data.entries()).map(([theme, count]) => (
                         <div key={theme} className="bar-wrapper" title={`${theme}: ${count}`}>
                             <span className="bar-label-top">{count}</span>
-                            <div className="bar" style={{ height: `${(count / maxCount) * 100}%` }}></div>
+                            <div className="bar" style={{ height: `${(count / maxCount) * 100}%`, backgroundColor: color }}></div>
                             <span className="bar-label-bottom">{theme}</span>
                         </div>
                     ))}
@@ -952,17 +953,19 @@ function parseMarkdownToHtml(markdown: string): string {
 type ReportPageProps = {
   results: CodingResult[];
   ai: GoogleGenAI | null;
+  reportContent: string;
+  setReportContent: React.Dispatch<React.SetStateAction<string>>;
+  chatHistory: ChatMessage[];
+  setChatHistory: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
 }
 
-function ReportPage({ results, ai }: ReportPageProps) {
+function ReportPage({ results, ai, reportContent, setReportContent, chatHistory, setChatHistory }: ReportPageProps) {
     const [reportPrompt, setReportPrompt] = useState(
         `Generate a summary report based on the provided thematic analysis data. Include the following sections:\n1.  **Executive Summary:** A brief overview of the key findings.\n2.  **Theme Breakdown:** Detail each theme, its frequency, and include 2-3 illustrative quotes from the original responses.\n3.  **Key Insights & Recommendations:** Conclude with actionable insights derived from the analysis.`
     );
-    const [reportContent, setReportContent] = useState('');
     const [isReportLoading, setIsReportLoading] = useState(false);
     const [reportError, setReportError] = useState<string | null>(null);
 
-    const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
     const [chatInput, setChatInput] = useState('');
     const [isChatLoading, setIsChatLoading] = useState(false);
     const chatHistoryRef = useRef<HTMLDivElement>(null);
@@ -1089,9 +1092,9 @@ function ReportPage({ results, ai }: ReportPageProps) {
             <div className="panel data-visualization">
                 <h2>Theme Sentiment Analysis</h2>
                 <div className="charts-wrapper">
-                    <BarChartComponent title="Positive Themes" data={themeCounts.positive} />
-                    <BarChartComponent title="Negative Themes" data={themeCounts.negative} />
-                    <BarChartComponent title="Neutral Themes" data={themeCounts.neutral} />
+                    <BarChartComponent title="Positive Themes" data={themeCounts.positive} color="#28a745" />
+                    <BarChartComponent title="Negative Themes" data={themeCounts.negative} color="#dc3545" />
+                    <BarChartComponent title="Neutral Themes" data={themeCounts.neutral} color="#6c757d" />
                 </div>
             </div>
             <div className="report-page-layout">
@@ -1237,6 +1240,8 @@ function App() {
   });
 
   const [results, setResults] = useState<CodingResult[]>([]);
+  const [reportContent, setReportContent] = useState('');
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const ai = useMemo(() => (apiKey ? new GoogleGenAI({ apiKey }) : null), [apiKey]);
   
   // Save to localStorage whenever state changes
@@ -1288,7 +1293,14 @@ function App() {
       case 'analysis':
         return <AnalysisPage themes={activeThemes} results={results} setResults={setResults} ai={ai} addNewThemes={handleAddNewThemes} />;
       case 'report':
-        return <ReportPage results={results} ai={ai} />;
+        return <ReportPage 
+                  results={results} 
+                  ai={ai}
+                  reportContent={reportContent}
+                  setReportContent={setReportContent}
+                  chatHistory={chatHistory}
+                  setChatHistory={setChatHistory}
+                />;
       default:
         return <CodebookPage 
                   codebooks={codebooks} 
