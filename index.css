@@ -92,13 +92,21 @@ h3 {
     justify-content: center;
     align-items: center;
     position: relative;
+    padding: 0.5rem 0;
 }
 
-.theme-switcher {
+.header-controls {
     position: absolute;
     top: 50%;
     right: 0;
     transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.settings-button,
+.theme-switcher {
     background: transparent;
     border: 1px solid var(--border-color);
     color: var(--text-color);
@@ -113,6 +121,7 @@ h3 {
     transition: background-color 0.2s, border-color 0.2s;
 }
 
+.settings-button:hover,
 .theme-switcher:hover {
     background-color: var(--background-color);
 }
@@ -267,7 +276,28 @@ textarea {
     color: var(--primary-hover-color);
 }
 
+[data-theme='dark'] .button.secondary-button:hover:not(:disabled) {
+    background-color: rgba(171, 71, 188, 0.1);
+}
+
 .button.secondary-button:disabled {
+    border-color: var(--text-muted-color);
+    background-color: transparent;
+    color: var(--text-muted-color);
+}
+
+.button.tertiary-button {
+    background-color: transparent;
+    border: 1px solid var(--text-muted-color);
+    color: var(--text-muted-color);
+}
+
+.button.tertiary-button:hover:not(:disabled) {
+    background-color: var(--text-muted-color);
+    color: var(--surface-color);
+}
+
+.button.tertiary-button:disabled {
     border-color: var(--text-muted-color);
     background-color: transparent;
     color: var(--text-muted-color);
@@ -368,6 +398,97 @@ input[type="file"] {
     white-space: pre-wrap;
     width: 100%;
 }
+
+/* --- Modal Styles --- */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background-color: var(--surface-color);
+  padding: 2rem;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+  width: 90%;
+  max-width: 500px;
+  position: relative;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.modal-header h2 {
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 0;
+    font-size: 1.5rem;
+}
+
+.modal-close-button {
+    background: none;
+    border: none;
+    font-size: 2rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--text-muted-color);
+    transition: color 0.2s;
+}
+.modal-close-button:hover {
+    color: var(--text-color);
+}
+
+.modal-body p {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    color: var(--text-color);
+    line-height: 1.6;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+}
+
+.modal-actions .button {
+    width: auto;
+}
+
+.api-key-status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+.api-key-status p {
+    margin: 0;
+    color: var(--text-color);
+    font-weight: 500;
+}
+.api-key-info {
+    font-size: 0.85rem;
+    color: var(--text-muted-color);
+    margin-top: 0.5rem;
+    margin-bottom: 0;
+}
+.api-key-content .form-group {
+    margin-bottom: 0;
+}
+
 
 /* --- Codebook Page Specific Styles --- */
 .codebook-management-controls {
@@ -495,6 +616,84 @@ input[type="file"] {
 .sentiment-neutral {
     background-color: #6c757d;
 }
+
+/* --- Theme Suggestion Modal --- */
+.suggestion-modal-content {
+    max-width: 800px;
+}
+
+.suggestion-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 0.5rem;
+    margin: 1rem -0.5rem 0;
+    background-color: var(--background-color);
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+}
+
+.suggestion-item {
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background-color: var(--surface-color);
+    transition: opacity 0.3s;
+}
+.suggestion-item.is-disabled {
+    opacity: 0.5;
+}
+
+.suggestion-item p {
+    margin-top: 0;
+    font-weight: 500;
+}
+.suggestion-item blockquote {
+    margin: 0 0 1rem 0;
+    padding: 0.75rem;
+    border-left: 4px solid var(--primary-color);
+    background-color: var(--background-color);
+    color: var(--text-muted-color);
+    font-style: italic;
+    border-radius: 0 var(--border-radius) var(--border-radius) 0;
+}
+
+.suggestion-controls {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+.suggestion-approval {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-top: 0.75rem; /* Align with input padding */
+}
+
+.suggestion-approval input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.suggestion-inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.suggestion-inputs .form-group {
+    margin-bottom: 0;
+}
+
+.suggestion-inputs .form-group textarea {
+    min-height: auto;
+}
+
 
 /* --- Report Page Styles --- */
 .charts-wrapper {

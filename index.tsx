@@ -21,6 +21,10 @@ type CodingResult = {
   sentiment: 'Positive' | 'Negative' | 'Neutral';
   confidenceScore: number;
   reasoning: string;
+  suggestedTheme?: {
+    name: string;
+    description: string;
+  };
 };
 
 type Page = 'codebook' | 'analysis' | 'report';
@@ -28,6 +32,222 @@ type Page = 'codebook' | 'analysis' | 'report';
 type ChatMessage = {
     role: 'user' | 'model';
     text: string;
+}
+
+// =================================================================
+// API Key Modal Component
+// =================================================================
+type ApiKeyModalProps = {
+    isOpen: boolean;
+    onClose: () => void;
+    apiKey: string | null;
+    setApiKey: (key: string | null) => void;
+};
+
+function ApiKeyModal({ isOpen, onClose, apiKey, setApiKey }: ApiKeyModalProps) {
+    const [inputKey, setInputKey] = useState('');
+
+    const handleSave = () => {
+        if (inputKey.trim()) {
+            setApiKey(inputKey.trim());
+            setInputKey('');
+            onClose();
+        }
+    };
+    
+    const handleClear = () => {
+        setApiKey(null);
+        setInputKey('');
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                 <div className="modal-header">
+                    <h2>Gemini API Key</h2>
+                    <button onClick={onClose} className="modal-close-button" aria-label="Close API Key settings">&times;</button>
+                </div>
+                <div className="api-key-content">
+                    {apiKey ? (
+                        <div className="api-key-status">
+                            <p>API Key is set. You're ready to analyze.</p>
+                            <button onClick={handleClear} className="button small-button secondary-button">Clear Key</button>
+                        </div>
+                    ) : (
+                        <div className="form-group">
+                            <label htmlFor="api-key-input">Enter your key to enable AI features.</label>
+                            <div className="input-group">
+                                <input
+                                    id="api-key-input"
+                                    type="password"
+                                    value={inputKey}
+                                    onChange={(e) => setInputKey(e.target.value)}
+                                    placeholder="Enter your Gemini API Key"
+                                    aria-label="Gemini API Key Input"
+                                    autoFocus
+                                />
+                                <button onClick={handleSave} className="button">Save Key</button>
+                            </div>
+                            <p className="api-key-info">Your API key is stored only in your browser's local storage.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+
+// =================================================================
+// Analysis Confirmation Modal Component
+// =================================================================
+type AnalysisConfirmationModalProps = {
+    isOpen: boolean;
+    onClose: () => void;
+    onAppend: () => void;
+    onReplace: () => void;
+};
+
+function AnalysisConfirmationModal({ isOpen, onClose, onAppend, onReplace }: AnalysisConfirmationModalProps) {
+    if (!isOpen) return null;
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                 <div className="modal-header">
+                    <h2>Existing Results Found</h2>
+                    <button onClick={onClose} className="modal-close-button" aria-label="Close dialog">&times;</button>
+                </div>
+                <div className="modal-body">
+                    <p>You have existing analysis results. How would you like to proceed with the new data?</p>
+                    <div className="modal-actions">
+                        <button onClick={onAppend} className="button">Append to Results</button>
+                        <button onClick={onReplace} className="button secondary-button">Replace Results</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// =================================================================
+// Theme Suggestion Modal Component
+// =================================================================
+type SuggestedThemeWithStatus = CodingResult & {
+    isApproved: boolean;
+    editedName: string;
+    editedDescription: string;
+};
+
+type ThemeSuggestionModalProps = {
+    isOpen: boolean;
+    suggestions: CodingResult[];
+    onComplete: (processedSuggestions: CodingResult[], newThemes: Theme[]) => void;
+    onClose: () => void;
+};
+
+function ThemeSuggestionModal({ isOpen, suggestions, onComplete, onClose }: ThemeSuggestionModalProps) {
+    const [processedSuggestions, setProcessedSuggestions] = useState<SuggestedThemeWithStatus[]>([]);
+
+    useEffect(() => {
+        if (isOpen && suggestions.length > 0) {
+            setProcessedSuggestions(suggestions.map(s => ({
+                ...s,
+                isApproved: true, // Default to approved
+                editedName: s.suggestedTheme!.name,
+                editedDescription: s.suggestedTheme!.description,
+            })));
+        }
+    }, [isOpen, suggestions]);
+
+    const handleToggleApproval = (index: number) => {
+        setProcessedSuggestions(prev => prev.map((s, i) => i === index ? { ...s, isApproved: !s.isApproved } : s));
+    };
+    
+    const handleFieldChange = (index: number, field: 'editedName' | 'editedDescription', value: string) => {
+        setProcessedSuggestions(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s));
+    };
+
+    const handleFinish = () => {
+        const newThemes: Theme[] = [];
+        const finalResults: CodingResult[] = [];
+
+        processedSuggestions.forEach(s => {
+            if (s.isApproved && s.editedName.trim() && s.editedDescription.trim()) {
+                const newTheme = { name: s.editedName.trim(), description: s.editedDescription.trim() };
+                newThemes.push(newTheme);
+                // Create a new result object without the suggestion fields
+                const { suggestedTheme, isApproved, editedName, editedDescription, ...coreResult } = s;
+                finalResults.push({ ...coreResult, themeName: newTheme.name });
+            } else {
+                const { suggestedTheme, isApproved, editedName, editedDescription, ...coreResult } = s;
+                finalResults.push({ ...coreResult, themeName: 'Uncategorized' });
+            }
+        });
+        onComplete(finalResults, newThemes);
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="modal-overlay">
+            <div className="modal-content suggestion-modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                    <h2>AI Theme Suggestions</h2>
+                    <button onClick={onClose} className="modal-close-button" aria-label="Close dialog">&times;</button>
+                </div>
+                <div className="modal-body">
+                    <p>The AI found some responses that might not fit the current codebook. Review, edit, and approve the themes you want to add.</p>
+                    <div className="suggestion-list">
+                        {processedSuggestions.map((s, index) => (
+                            <div key={index} className={`suggestion-item ${!s.isApproved ? 'is-disabled' : ''}`}>
+                                <p>For the response:</p>
+                                <blockquote>{s.originalResponse}</blockquote>
+                                <div className="suggestion-controls">
+                                    <div className="suggestion-approval">
+                                        <input
+                                            type="checkbox"
+                                            id={`approve-${index}`}
+                                            checked={s.isApproved}
+                                            onChange={() => handleToggleApproval(index)}
+                                            aria-label="Approve suggestion"
+                                        />
+                                    </div>
+                                    <div className="suggestion-inputs">
+                                        <div className="form-group">
+                                            <label htmlFor={`theme-name-${index}`}>Suggested Theme Name</label>
+                                            <input
+                                                id={`theme-name-${index}`}
+                                                type="text"
+                                                value={s.editedName}
+                                                onChange={(e) => handleFieldChange(index, 'editedName', e.target.value)}
+                                                disabled={!s.isApproved}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label htmlFor={`theme-desc-${index}`}>Suggested Description</label>
+                                            <textarea
+                                                id={`theme-desc-${index}`}
+                                                value={s.editedDescription}
+                                                onChange={(e) => handleFieldChange(index, 'editedDescription', e.target.value)}
+                                                disabled={!s.isApproved}
+                                                rows={3}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="modal-actions">
+                    <button onClick={handleFinish} className="button">Add Approved Themes & Continue</button>
+                </div>
+            </div>
+        </div>
+    );
 }
 
 // =================================================================
@@ -305,14 +525,26 @@ type AnalysisPageProps = {
   themes: Theme[];
   results: CodingResult[];
   setResults: React.Dispatch<React.SetStateAction<CodingResult[]>>;
-  ai: GoogleGenAI;
+  ai: GoogleGenAI | null;
+  addNewThemes: (newThemes: Theme[]) => void;
 }
 
-function AnalysisPage({ themes, results, setResults, ai }: AnalysisPageProps) {
+function AnalysisPage({ themes, results, setResults, ai, addNewThemes }: AnalysisPageProps) {
   const [responses, setResponses] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showLowConfidenceOnly, setShowLowConfidenceOnly] = useState(false);
+  
+  // Modals state
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
+
+  // State for theme suggestion workflow
+  const [suggestedThemes, setSuggestedThemes] = useState<CodingResult[]>([]);
+  const [pendingResults, setPendingResults] = useState<CodingResult[]>([]);
+  const [analysisMode, setAnalysisMode] = useState<'replace' | 'append' | null>(null);
+
+
   const LOW_CONFIDENCE_THRESHOLD = 0.7;
 
   const filteredResults = useMemo(() => {
@@ -342,15 +574,10 @@ function AnalysisPage({ themes, results, setResults, ai }: AnalysisPageProps) {
       setResults(updatedResults);
   };
 
-  const handleCodeResponses = async () => {
-    if (themes.length === 0 || !responses.trim()) {
-      setError('Please define a codebook and provide some responses to code.');
-      return;
-    }
-
+  const runAnalysis = async (mode: 'replace' | 'append') => {
     setIsLoading(true);
     setError(null);
-    setResults([]);
+    setAnalysisMode(mode);
 
     const systemInstruction = `You are an expert qualitative data analyst. Your task is to categorize user-provided text responses into a set of predefined themes.
 - Analyze each response carefully.
@@ -358,7 +585,9 @@ function AnalysisPage({ themes, results, setResults, ai }: AnalysisPageProps) {
 - Determine the sentiment of the response (Positive, Negative, or Neutral).
 - Provide a confidence score from 0.0 (not confident at all) to 1.0 (completely confident).
 - Provide a brief reasoning for your choice.
-- Only use the themes provided. Do not create new themes. If no theme fits, assign "Uncategorized".`;
+- If a response clearly represents a new, distinct, and important theme not covered in the codebook, you may suggest a new theme.
+- When suggesting a new theme, assign the 'themeName' as 'Uncategorized' and provide the new theme details in the 'suggestedTheme' field.
+- Do not suggest a new theme if the response can reasonably fit into an existing one. Only use the themes provided.`;
 
     const themeDefinitions = themes.map(t => `- ${t.name}: ${t.description}`).join('\n');
     const responseList = responses.trim().split('\n');
@@ -379,6 +608,14 @@ function AnalysisPage({ themes, results, setResults, ai }: AnalysisPageProps) {
               sentiment: { type: Type.STRING, description: 'The sentiment of the response (Positive, Negative, or Neutral).'},
               confidenceScore: { type: Type.NUMBER, description: 'A score between 0.0 and 1.0 indicating confidence.' },
               reasoning: { type: Type.STRING, description: 'A brief justification for the assigned theme.' },
+              suggestedTheme: {
+                type: Type.OBJECT,
+                description: 'A new theme suggested by the AI if no existing theme fits.',
+                properties: {
+                    name: { type: Type.STRING, description: 'The suggested new theme name.'},
+                    description: { type: Type.STRING, description: 'A brief description of the new theme.'}
+                },
+              },
             },
             required: ['originalResponse', 'themeName', 'sentiment', 'confidenceScore', 'reasoning'],
           },
@@ -388,6 +625,7 @@ function AnalysisPage({ themes, results, setResults, ai }: AnalysisPageProps) {
     };
 
     try {
+      if (!ai) throw new Error('API key not set.');
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
@@ -395,8 +633,25 @@ function AnalysisPage({ themes, results, setResults, ai }: AnalysisPageProps) {
       });
 
       const parsedResponse = JSON.parse(response.text);
-      setResults(parsedResponse.results);
+      const newResults: CodingResult[] = parsedResponse.results;
+      const suggestions = newResults.filter(r => r.suggestedTheme && r.suggestedTheme.name && r.suggestedTheme.description);
+      const regularResults = newResults.filter(r => !r.suggestedTheme || !r.suggestedTheme.name);
 
+      setPendingResults(regularResults); // Hold regular results
+
+      if (suggestions.length > 0) {
+        setSuggestedThemes(suggestions);
+        setIsSuggestionModalOpen(true);
+      } else {
+        // No suggestions, proceed as normal
+        if (mode === 'append') {
+          setResults(prev => [...prev, ...regularResults]);
+        } else {
+          setResults(regularResults);
+        }
+        setPendingResults([]);
+      }
+      setResponses(''); // Clear input after successful analysis
     } catch (e) {
       console.error(e);
       const errorMessage = e instanceof Error ? e.message : String(e);
@@ -404,6 +659,50 @@ function AnalysisPage({ themes, results, setResults, ai }: AnalysisPageProps) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleCodeResponses = async () => {
+    if (!ai) {
+        setError('Please set your Gemini API key to run the analysis.');
+        return;
+    }
+    if (themes.length === 0 || !responses.trim()) {
+      setError('Please define a codebook and provide some responses to code.');
+      return;
+    }
+
+    if (results.length > 0) {
+        setIsConfirmModalOpen(true);
+    } else {
+        await runAnalysis('replace');
+    }
+  };
+
+  const handleConfirmAppend = () => {
+    setIsConfirmModalOpen(false);
+    runAnalysis('append');
+  };
+  const handleConfirmReplace = () => {
+      setIsConfirmModalOpen(false);
+      runAnalysis('replace');
+  };
+  
+  const handleSuggestionsComplete = (processedSuggestions: CodingResult[], newThemes: Theme[]) => {
+    addNewThemes(newThemes);
+
+    const finalResults = [...pendingResults, ...processedSuggestions];
+
+    if (analysisMode === 'append') {
+        setResults(prev => [...prev, ...finalResults]);
+    } else {
+        setResults(finalResults);
+    }
+
+    // Cleanup
+    setIsSuggestionModalOpen(false);
+    setSuggestedThemes([]);
+    setPendingResults([]);
+    setAnalysisMode(null);
   };
   
   const getConfidenceColor = (score: number) => {
@@ -447,98 +746,124 @@ function AnalysisPage({ themes, results, setResults, ai }: AnalysisPageProps) {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
+  
+  const handleClearResults = () => {
+    setResults([]);
+  };
 
   return (
-    <div className="page-content-vertical">
-        <div className="panel" role="form" aria-labelledby="responses-heading">
-            <h2 id="responses-heading">Add Responses for Analysis</h2>
-            <div className="analysis-input-layout">
-                <div className="form-group">
-                    <label htmlFor="responses-textarea">Paste your responses here, one per line.</label>
-                    <textarea
-                        id="responses-textarea"
-                        value={responses}
-                        onChange={(e) => setResponses(e.target.value)}
-                        placeholder="The support team was very helpful.&#10;The app is too slow.&#10;I wish there was a dark mode feature."
-                        style={{minHeight: '200px'}}
-                    />
-                </div>
-                <div className="bulk-upload-section analysis-upload">
-                    <h3>Or Upload Data</h3>
-                    <p>Upload a single-column CSV file with responses (no header row).</p>
-                    <label htmlFor="csv-response-upload" className="button">Upload CSV</label>
-                    <input id="csv-response-upload" type="file" accept=".csv" onChange={handleResponseFileUpload} />
-                </div>
-            </div>
-            <button onClick={handleCodeResponses} disabled={isLoading || themes.length === 0 || !responses.trim()} className="button">
-                {isLoading ? 'Coding...' : 'Code Responses'}
-            </button>
-        </div>
-        <div className="panel" role="region" aria-live="polite">
-            <div className="results-header">
-                <h2>Review Results</h2>
-                <div className="controls-group">
-                    <div className="filter-controls">
-                        <label>
-                            <input type="checkbox" checked={showLowConfidenceOnly} onChange={(e) => setShowLowConfidenceOnly(e.target.checked)} />
-                            Show low confidence only (&lt;{LOW_CONFIDENCE_THRESHOLD * 100}%)
-                        </label>
+    <>
+        <div className="page-content-vertical">
+            <div className="panel" role="form" aria-labelledby="responses-heading">
+                <h2 id="responses-heading">Add Responses for Analysis</h2>
+                {!ai && (
+                    <div className="error" style={{marginBottom: '1rem'}}>
+                        Please set your Gemini API key in the settings (⚙️ icon) to enable AI-powered analysis.
                     </div>
-                    <button onClick={handleDownloadCSV} disabled={results.length === 0} className="button small-button">
-                        Download CSV
-                    </button>
+                )}
+                <div className="analysis-input-layout">
+                    <div className="form-group">
+                        <label htmlFor="responses-textarea">Paste your responses here, one per line.</label>
+                        <textarea
+                            id="responses-textarea"
+                            value={responses}
+                            onChange={(e) => setResponses(e.target.value)}
+                            placeholder="The support team was very helpful.&#10;The app is too slow.&#10;I wish there was a dark mode feature."
+                            style={{minHeight: '200px'}}
+                        />
+                    </div>
+                    <div className="bulk-upload-section analysis-upload">
+                        <h3>Or Upload Data</h3>
+                        <p>Upload a single-column CSV file with responses (no header row).</p>
+                        <label htmlFor="csv-response-upload" className="button">Upload CSV</label>
+                        <input id="csv-response-upload" type="file" accept=".csv" onChange={handleResponseFileUpload} />
+                    </div>
                 </div>
+                <button onClick={handleCodeResponses} disabled={isLoading || themes.length === 0 || !responses.trim() || !ai} className="button">
+                    {isLoading ? 'Coding...' : 'Code Responses'}
+                </button>
             </div>
-            
-            {isLoading && (
-                <div className="loading">
-                    <div className="loading-spinner"></div>
-                    <p>AI is analyzing your data...</p>
+            <div className="panel" role="region" aria-live="polite">
+                <div className="results-header">
+                    <h2>Review Results</h2>
+                    <div className="controls-group">
+                        <div className="filter-controls">
+                            <label>
+                                <input type="checkbox" checked={showLowConfidenceOnly} onChange={(e) => setShowLowConfidenceOnly(e.target.checked)} />
+                                Show low confidence only (&lt;{LOW_CONFIDENCE_THRESHOLD * 100}%)
+                            </label>
+                        </div>
+                        <button onClick={handleClearResults} disabled={results.length === 0} className="button small-button tertiary-button">
+                            Clear Results
+                        </button>
+                        <button onClick={handleDownloadCSV} disabled={results.length === 0} className="button small-button">
+                            Download CSV
+                        </button>
+                    </div>
                 </div>
-            )}
-            {error && <div className="error"><p><strong>Error</strong></p>{error}</div>}
-            {!isLoading && !error && results.length === 0 && (
-                <div className="results-placeholder">
-                    <p>Your coded responses will appear here.</p>
-                </div>
-            )}
-            {!isLoading && results.length > 0 && (
-                <div className="table-wrapper">
-                    <table className="results-table">
-                        <thead>
-                            <tr>
-                                <th>Response</th>
-                                <th>Assigned Theme</th>
-                                <th>Sentiment</th>
-                                <th>Confidence</th>
-                                <th>Reasoning</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredResults.map((result, index) => (
-                                <tr key={index}>
-                                    <td>{result.originalResponse}</td>
-                                    <EditableCell
-                                        value={result.themeName}
-                                        options={themes.map(t => t.name).concat(['Uncategorized'])}
-                                        onUpdate={(newValue) => handleUpdateResult(index, 'themeName', newValue)}
-                                    />
-                                    <SentimentCell
-                                        value={result.sentiment}
-                                        onUpdate={(newValue) => handleUpdateResult(index, 'sentiment', newValue as 'Positive' | 'Negative' | 'Neutral')}
-                                    />
-                                    <td className="confidence-cell" style={{ color: getConfidenceColor(result.confidenceScore) }}>
-                                        {(result.confidenceScore * 100).toFixed(0)}%
-                                    </td>
-                                    <td>{result.reasoning}</td>
+                
+                {isLoading && (
+                    <div className="loading">
+                        <div className="loading-spinner"></div>
+                        <p>AI is analyzing your data...</p>
+                    </div>
+                )}
+                {error && <div className="error"><p><strong>Error</strong></p>{error}</div>}
+                {!isLoading && !error && results.length === 0 && (
+                    <div className="results-placeholder">
+                        <p>Your coded responses will appear here.</p>
+                    </div>
+                )}
+                {!isLoading && results.length > 0 && (
+                    <div className="table-wrapper">
+                        <table className="results-table">
+                            <thead>
+                                <tr>
+                                    <th>Response</th>
+                                    <th>Assigned Theme</th>
+                                    <th>Sentiment</th>
+                                    <th>Confidence</th>
+                                    <th>Reasoning</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
+                            </thead>
+                            <tbody>
+                                {filteredResults.map((result, index) => (
+                                    <tr key={index}>
+                                        <td>{result.originalResponse}</td>
+                                        <EditableCell
+                                            value={result.themeName}
+                                            options={themes.map(t => t.name).concat(['Uncategorized'])}
+                                            onUpdate={(newValue) => handleUpdateResult(index, 'themeName', newValue)}
+                                        />
+                                        <SentimentCell
+                                            value={result.sentiment}
+                                            onUpdate={(newValue) => handleUpdateResult(index, 'sentiment', newValue as 'Positive' | 'Negative' | 'Neutral')}
+                                        />
+                                        <td className="confidence-cell" style={{ color: getConfidenceColor(result.confidenceScore) }}>
+                                            {(result.confidenceScore * 100).toFixed(0)}%
+                                        </td>
+                                        <td>{result.reasoning}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
         </div>
-    </div>
+        <AnalysisConfirmationModal
+            isOpen={isConfirmModalOpen}
+            onClose={() => setIsConfirmModalOpen(false)}
+            onAppend={handleConfirmAppend}
+            onReplace={handleConfirmReplace}
+        />
+        <ThemeSuggestionModal
+            isOpen={isSuggestionModalOpen}
+            onClose={() => setIsSuggestionModalOpen(false)}
+            suggestions={suggestedThemes}
+            onComplete={handleSuggestionsComplete}
+        />
+    </>
   );
 }
 
@@ -626,7 +951,7 @@ function parseMarkdownToHtml(markdown: string): string {
 // =================================================================
 type ReportPageProps = {
   results: CodingResult[];
-  ai: GoogleGenAI;
+  ai: GoogleGenAI | null;
 }
 
 function ReportPage({ results, ai }: ReportPageProps) {
@@ -668,6 +993,10 @@ function ReportPage({ results, ai }: ReportPageProps) {
 
 
     const handleGenerateReport = async () => {
+        if (!ai) {
+            setReportError('Please set your Gemini API key to generate a report.');
+            return;
+        }
         setIsReportLoading(true);
         setReportError(null);
         setReportContent('');
@@ -722,7 +1051,7 @@ function ReportPage({ results, ai }: ReportPageProps) {
     
     const handleSendChat = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!chatInput.trim() || isChatLoading) return;
+        if (!chatInput.trim() || isChatLoading || !ai) return;
 
         const newUserMessage: ChatMessage = { role: 'user', text: chatInput };
         setChatHistory(prev => [...prev, newUserMessage]);
@@ -752,6 +1081,11 @@ function ReportPage({ results, ai }: ReportPageProps) {
     
     return (
         <div className="page-content-vertical">
+             {!ai && (
+                <div className="panel error" style={{marginBottom: '0', textAlign: 'center'}}>
+                    Please set your Gemini API key in the settings (⚙️ icon) to enable report generation and data chat.
+                </div>
+            )}
             <div className="panel data-visualization">
                 <h2>Theme Sentiment Analysis</h2>
                 <div className="charts-wrapper">
@@ -765,6 +1099,9 @@ function ReportPage({ results, ai }: ReportPageProps) {
                 <div className="panel chat-panel">
                     <h2>Chat with your Data</h2>
                     <div className="chat-history" ref={chatHistoryRef}>
+                        {chatHistory.length === 0 && !ai && (
+                            <div className="results-placeholder"><p>Set your API key to chat with your data.</p></div>
+                        )}
                         {chatHistory.map((msg, index) => (
                             <div key={index} className={`chat-message ${msg.role}-message`}>
                                 {msg.text}
@@ -787,9 +1124,10 @@ function ReportPage({ results, ai }: ReportPageProps) {
                             value={chatInput}
                             onChange={(e) => setChatInput(e.target.value)}
                             placeholder="Ask a question about your data..."
-                            disabled={isChatLoading}
+                            disabled={isChatLoading || !ai}
+                            aria-label="Chat with your data input"
                         />
-                        <button type="submit" disabled={isChatLoading || !chatInput.trim()}>Send</button>
+                        <button type="submit" disabled={isChatLoading || !chatInput.trim() || !ai}>Send</button>
                     </form>
                 </div>
 
@@ -806,7 +1144,7 @@ function ReportPage({ results, ai }: ReportPageProps) {
                         />
                     </div>
                     <div className="report-actions">
-                        <button onClick={handleGenerateReport} disabled={isReportLoading || results.length === 0} className="button">
+                        <button onClick={handleGenerateReport} disabled={isReportLoading || results.length === 0 || !ai} className="button">
                             {isReportLoading ? 'Generating...' : 'Generate Report'}
                         </button>
                     </div>
@@ -850,11 +1188,29 @@ function App() {
     const savedTheme = localStorage.getItem('thematicCoder-theme');
     return (savedTheme === 'light' || savedTheme === 'dark') ? savedTheme : 'light';
   });
+  
+  const [apiKey, setApiKey] = useState<string | null>(() => localStorage.getItem('thematicCoder-apiKey'));
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('thematicCoder-theme', theme);
   }, [theme]);
+
+  // Show API key modal on first load if no key is set
+  useEffect(() => {
+    if (!apiKey) {
+      setIsModalOpen(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (apiKey) {
+      localStorage.setItem('thematicCoder-apiKey', apiKey);
+    } else {
+      localStorage.removeItem('thematicCoder-apiKey');
+    }
+  }, [apiKey]);
 
   const handleThemeToggle = () => {
     setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
@@ -881,7 +1237,7 @@ function App() {
   });
 
   const [results, setResults] = useState<CodingResult[]>([]);
-  const ai = useMemo(() => new GoogleGenAI({ apiKey: process.env.API_KEY }), []);
+  const ai = useMemo(() => (apiKey ? new GoogleGenAI({ apiKey }) : null), [apiKey]);
   
   // Save to localStorage whenever state changes
   useEffect(() => {
@@ -907,6 +1263,17 @@ function App() {
     });
   };
 
+  const handleAddNewThemes = (newThemes: Theme[]) => {
+    if (!activeCodebook) return;
+    // Filter out duplicates
+    const existingThemeNames = new Set(activeThemes.map(t => t.name.toLowerCase()));
+    const uniqueNewThemes = newThemes.filter(newTheme => !existingThemeNames.has(newTheme.name.toLowerCase()));
+
+    if (uniqueNewThemes.length > 0) {
+        handleSetThemes(prevThemes => [...prevThemes, ...uniqueNewThemes]);
+    }
+  };
+
   const renderPage = () => {
     switch (currentPage) {
       case 'codebook':
@@ -919,7 +1286,7 @@ function App() {
                   setThemes={handleSetThemes}
                />;
       case 'analysis':
-        return <AnalysisPage themes={activeThemes} results={results} setResults={setResults} ai={ai} />;
+        return <AnalysisPage themes={activeThemes} results={results} setResults={setResults} ai={ai} addNewThemes={handleAddNewThemes} />;
       case 'report':
         return <ReportPage results={results} ai={ai} />;
       default:
@@ -938,24 +1305,35 @@ function App() {
     <div className="container">
       <header className="app-header">
         <h1>Thematic Coder AI</h1>
-        <button onClick={handleThemeToggle} className="theme-switcher" title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
-            {theme === 'light' ? '🌙' : '☀️'}
-        </button>
+        <div className="header-controls">
+            <button onClick={() => setIsModalOpen(true)} className="settings-button" title="API Key Settings" aria-label="API Key Settings">
+                ⚙️
+            </button>
+            <button onClick={handleThemeToggle} className="theme-switcher" title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
+                {theme === 'light' ? '🌙' : '☀️'}
+            </button>
+        </div>
       </header>
       <nav className="main-nav">
         <button onClick={() => setCurrentPage('codebook')} className={currentPage === 'codebook' ? 'active' : ''}>
           1. Codebook
         </button>
-        <button onClick={() => setCurrentPage('analysis')} className={currentPage === 'analysis' ? 'active' : ''} disabled={activeThemes.length === 0}>
+        <button onClick={() => setCurrentPage('analysis')} className={currentPage === 'analysis' ? 'active' : ''} disabled={activeThemes.length === 0 || !apiKey}>
           2. Analysis
         </button>
-        <button onClick={() => setCurrentPage('report')} className={currentPage === 'report' ? 'active' : ''} disabled={results.length === 0}>
+        <button onClick={() => setCurrentPage('report')} className={currentPage === 'report' ? 'active' : ''} disabled={results.length === 0 || !apiKey}>
           3. Report
         </button>
       </nav>
       <main>
         {renderPage()}
       </main>
+      <ApiKeyModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        apiKey={apiKey} 
+        setApiKey={setApiKey} 
+      />
     </div>
   );
 }
