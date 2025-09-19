@@ -593,7 +593,7 @@ input[type="file"] {
     white-space: nowrap;
 }
 
-.confidence-cell {
+.results-table .confidence-cell {
     font-weight: bold;
     text-align: center;
 }
