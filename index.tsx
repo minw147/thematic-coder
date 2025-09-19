@@ -535,6 +535,33 @@ function CodebookPage({ themes, setThemes, codebooks, setCodebooks, activeCodebo
     event.target.value = ''; // Reset file input
   };
 
+  const handleExportCSV = () => {
+    if (!activeCodebook || themes.length === 0) return;
+
+    const escapeCsvField = (field: string): string => {
+        const stringField = String(field);
+        if (/[",\n]/.test(stringField)) {
+            return `"${stringField.replace(/"/g, '""')}"`;
+        }
+        return stringField;
+    };
+
+    const csvContent = themes
+        .map(theme => `${escapeCsvField(theme.name)},${escapeCsvField(theme.description)}`)
+        .join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${activeCodebook}-codebook.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
 
   return (
     <>
@@ -613,7 +640,17 @@ function CodebookPage({ themes, setThemes, codebooks, setCodebooks, activeCodebo
              )}
            </div>
            <div className="right-panel panel">
-              <h2>Current Codebook: {activeCodebook || "None selected"}</h2>
+              <div className="panel-title-header">
+                <h2>Current Codebook: {activeCodebook || "None selected"}</h2>
+                <button
+                    onClick={handleExportCSV}
+                    disabled={!activeCodebook || themes.length === 0}
+                    className="button small-button secondary-button"
+                    title={themes.length > 0 ? `Export '${activeCodebook}' as CSV` : 'No themes to export'}
+                >
+                    Export CSV
+                </button>
+              </div>
               {activeCodebook && themes.length > 0 ? (
                     <ul className="theme-list" aria-live="polite">
                         {themes.map((theme, index) => (
