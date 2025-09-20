@@ -7,6 +7,30 @@ import { useState, useMemo, ChangeEvent, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 
+// Ensure no service workers from previous deployments intercept requests
+function unregisterServiceWorkers(): void {
+  if ('serviceWorker' in navigator) {
+    // Unregister all service workers for this origin
+    navigator.serviceWorker.getRegistrations().then(registrations => {
+      registrations.forEach(reg => {
+        reg.unregister();
+      });
+    }).catch(() => {
+      // noop
+    });
+    // Clear caches potentially populated by an old service worker
+    if (typeof caches !== 'undefined' && caches.keys) {
+      caches.keys().then(keys => {
+        keys.forEach(key => {
+          caches.delete(key);
+        });
+      }).catch(() => {
+        // noop
+      });
+    }
+  }
+}
+
 // Type definitions for our data structures
 type Theme = {
   name: string;
