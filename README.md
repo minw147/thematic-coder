@@ -1,12 +1,7 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+## Overview
+The Thematic Coder AI is a sophisticated web application designed to revolutionize the process of qualitative data analysis. Built for researchers, marketers, and product managers, this tool leverages the power of the Google Gemini API to automate the time-consuming task of thematically coding open-ended survey responses. It provides a seamless, end-to-end workflow that takes users from raw CSV data to insightful, interactive reports, transforming a traditionally manual process into an efficient, AI-assisted exploration of user feedback.
 
-# Run and deploy your AI Studio app
-
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/drive/19_ysT5M69X7RvZoTuY6xQgLia-no2_iG
+Try out the app here: https://thematic-coder-ai-tool-832614651437.us-west1.run.app/
 
 ## Run Locally
 
