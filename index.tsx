@@ -1750,5 +1750,8 @@ function App() {
   );
 }
 
+// Proactively unregister any existing service workers on load
+unregisterServiceWorkers();
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App />);
